@@ -8,7 +8,9 @@ from PIL import Image
 import pypdfium2
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection  # Import your layout detection function
-from surya.model.detection.model import load_model, load_processor  # Import model loading functions
+# from surya.model.detection.model import load_model, load_processor  # Import model loading functions
+from surya.model.layout.model import load_model
+from surya.model.layout.processor import load_processor
 from surya.postprocessing.heatmap import draw_polys_on_image
 from surya.settings import settings
 
@@ -27,8 +29,8 @@ app.add_middleware(
 # Load models once when the application starts
 model = load_model()
 processor = load_processor()
-layout_model = load_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
-layout_processor = load_processor(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
+# layout_model = load_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
+# layout_processor = load_processor(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
 
 @app.post("/detect_layout/")
 async def detect_layout(file: UploadFile = File(...), return_image: bool = Query(False)):
@@ -41,8 +43,8 @@ async def detect_layout(file: UploadFile = File(...), return_image: bool = Query
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
 
         # Perform layout detection
-        line_predictions = batch_text_detection([pil_image], model, processor)
-        layout_predictions = batch_layout_detection([pil_image], layout_model, layout_processor, line_predictions)
+        # line_predictions = batch_text_detection([pil_image], model, processor)
+        layout_predictions = batch_layout_detection([pil_image], model, processor)
 
         # Create a result image with bounding boxes
         layout_image = draw_polys_on_image([p.polygon for p in layout_predictions[0].bboxes], pil_image.copy(), labels=[p.label for p in layout_predictions[0].bboxes])
