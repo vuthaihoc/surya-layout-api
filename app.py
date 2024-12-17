@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Query
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,8 +11,12 @@ from surya.layout import batch_layout_detection  # Import your layout detection 
 # from surya.model.detection.model import load_model, load_processor  # Import model loading functions
 from surya.model.layout.model import load_model
 from surya.model.layout.processor import load_processor
+from surya.ocr import run_ocr
 from surya.postprocessing.heatmap import draw_polys_on_image
-from surya.settings import settings
+
+from surya.model.detection.model import load_model as load_det_model, load_processor as load_det_processor
+from surya.model.recognition.model import load_model as load_rec_model
+from surya.model.recognition.processor import load_processor as load_rec_processor
 
 # Initialize FastAPI
 app = FastAPI()
@@ -29,8 +33,25 @@ app.add_middleware(
 # Load models once when the application starts
 model = load_model()
 processor = load_processor()
-# layout_model = load_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
-# layout_processor = load_processor(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
+det_processor, det_model = load_det_processor(), load_det_model()
+rec_model, rec_processor = load_rec_model(), load_rec_processor()
+
+@app.post("/detect_text/")
+async def detect_text(file: UploadFile = File(...), lang: str = "en,vi"):
+    try:
+        image = Image.open(file.file)
+        langs = lang.split(",")  # Chia tách ngôn ngữ
+        predictions = run_ocr([image], [langs], det_model, det_processor, rec_model, rec_processor)
+
+        # Ghép văn bản thành các đoạn văn
+        text_output = []
+        for prediction in predictions:
+            for line in prediction.text_lines:
+                text_output.append(line.text)
+
+        return {"text": "\n".join(text_output), "predictions": predictions}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/detect_layout/")
 async def detect_layout(file: UploadFile = File(...), return_image: bool = Query(False)):
@@ -62,7 +83,6 @@ async def detect_layout(file: UploadFile = File(...), return_image: bool = Query
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
-
 
 # Run the application
 if __name__ == "__main__":
